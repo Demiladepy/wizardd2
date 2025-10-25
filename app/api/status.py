@@ -1,69 +1,38 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
-from sqlalchemy.ext.asyncio import AsyncSession
-
+from pathlib import Path
+from app.crud import country as country_crud
 from app.core.database import get_db
-from app.crud.country import country_crud
-from app.schemas.country import CountryStatusResponse, ErrorResponse
-from app.services.image_service import image_service
+from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import Depends
 
-router = APIRouter(tags=["status"])
+router = APIRouter()
 
-
-@router.get(
-    "/status",
-    response_model=CountryStatusResponse,
-    responses={
-        200: {"description": "API status"},
-        500: {"model": ErrorResponse, "description": "Internal server error"},
-    },
-)
+@router.get("/status")
 async def get_status(db: AsyncSession = Depends(get_db)):
-    """
-    Get API status showing total countries and last refresh timestamp.
-    """
-    try:
-        total_countries = await country_crud.get_count(db)
-        last_refreshed = await country_crud.get_last_refreshed(db)
+    """Get API status"""
+    stats = await country_crud.get_stats(db)
+    return {
+        "total_countries": stats["total_countries"],
+        "last_refreshed_at": stats["last_refreshed_at"].isoformat() + "Z" if stats["last_refreshed_at"] else None
+    }
 
-        return {
-            "total_countries": total_countries,
-            "last_refreshed_at": last_refreshed,
-        }
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail={"error": "Internal server error", "details": str(e)},
-        )
-
-
-@router.get(
-    "/countries/image",
-    responses={
-        200: {"description": "Summary image", "content": {"image/png": {}}},
-        404: {"model": ErrorResponse, "description": "Summary image not found"},
-        500: {"model": ErrorResponse, "description": "Internal server error"},
-    },
-)
+@router.get("/countries/image")
 async def get_summary_image():
-    """
-    Serve the generated summary image.
-    """
-    try:
-        if not image_service.image_exists():
-            raise HTTPException(
-                status_code=404, detail={"error": "Summary image not found"}
-            )
-
-        image_path = image_service.get_image_path()
-        return FileResponse(
-            image_path,
-            media_type="image/png",
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
+    """Serve the generated summary image"""
+    # Use absolute path from project root
+    image_path = Path("cache/summary.png")
+    
+    # Check if file exists
+    if not image_path.exists():
         raise HTTPException(
-            status_code=500,
-            detail={"error": "Internal server error", "details": str(e)},
+            status_code=404,
+            detail={"error": "Summary image not found"}
         )
+    
+    # Return the actual PNG file
+    return FileResponse(
+        path=str(image_path.absolute()),
+        media_type="image/png",
+        filename="summary.png"
+    )
