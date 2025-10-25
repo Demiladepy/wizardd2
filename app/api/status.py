@@ -59,7 +59,6 @@ async def get_summary_image():
         return FileResponse(
             image_path,
             media_type="image/png",
-            filename="summary.png",
         )
     except HTTPException:
         raise
