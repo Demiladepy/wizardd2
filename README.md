@@ -103,7 +103,7 @@ API_TIMEOUT=30
 CACHE_DIR=cache
 ```
 
-### 6. Run Database Migrations
+### 6. Run Database Migration
 
 ```bash
 # Generate initial migration
