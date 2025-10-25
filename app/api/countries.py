@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.database import get_db
+from app.core.database import get_db, AsyncSessionLocal
 from app.services.external_api import ExternalAPIService
 from app.services.image_service import ImageService
 from app.crud import country as country_crud
@@ -10,14 +10,16 @@ import asyncio
 
 router = APIRouter()
 
-async def generate_image_background(db: AsyncSession):
-    """Background task to generate image"""
+async def generate_image_background():
+    """Background task to generate image - creates its own DB session"""
     try:
-        stats = await country_crud.get_stats(db)
-        top_countries = await country_crud.get_top_by_gdp(db, limit=5)
-        image_service = ImageService()
-        await image_service.generate_summary_image(stats, top_countries)
-        print("✅ Image generated successfully")
+        # Create new database session for background task
+        async with AsyncSessionLocal() as db:
+            stats = await country_crud.get_stats(db)
+            top_countries = await country_crud.get_top_by_gdp(db, limit=5)
+            image_service = ImageService()
+            await image_service.generate_summary_image(stats, top_countries)
+            print("✅ Image generated successfully")
     except Exception as e:
         print(f"⚠️ Image generation failed: {e}")
 
@@ -94,7 +96,8 @@ async def refresh_countries(
         result = await country_crud.upsert_countries_batch(db, processed)
         
         # Schedule image generation in background (don't wait)
-        background_tasks.add_task(generate_image_background, db)
+        # Note: No db parameter passed - function creates its own session
+        background_tasks.add_task(generate_image_background)
         
         # Return immediately
         return {
